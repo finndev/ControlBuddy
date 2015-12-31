@@ -18,7 +18,7 @@ namespace ControlBuddy
 {
     internal class Program
     {
-        public static int[] ControllerArray = {0, 1, 2, 3, 4};
+        public static int[] ControllerArray = { 0, 1, 2, 3, 4 };
         public static Menu Menu;
         public static Orbwalker.ActiveModes CurrentMode = Orbwalker.ActiveModes.None;
         public static GamepadState Controller;
@@ -45,7 +45,7 @@ namespace ControlBuddy
         private static void Game_OnGameLoad(EventArgs args)
         {
             foreach (var c in
-                ControllerArray.Select(controlId => new Controller((UserIndex) controlId)).Where(c => c.IsConnected))
+                ControllerArray.Select(controlId => new Controller((UserIndex)controlId)).Where(c => c.IsConnected))
             {
                 Controller = new GamepadState(c.UserIndex);
             }
@@ -73,16 +73,6 @@ namespace ControlBuddy
 
         private static void Game_OnGameUpdate(EventArgs args)
         {
-            var wp = ObjectManager.Player.Path.ToList();
-
-            //in case you manually click to move
-            if (wp.Count > 0 && ObjectManager.Player.Distance(wp[wp.Count - 1]) > 540)
-            {
-                PadPos = ObjectManager.Player.Position;
-                SetOrbwalkingMode(Orbwalker.ActiveModes.None);
-                return;
-            }
-
             if (Controller == null || !Controller.Connected)
             {
                 Chat.Print("Controller disconnected!");
@@ -93,14 +83,23 @@ namespace ControlBuddy
             Controller.Update();
             UpdateStates();
 
-            var p = ObjectManager.Player.ServerPosition.To2D() + Controller.LeftStick.Position/75;
+            // Camera
+            var camera = Camera.ScreenPosition +
+                         Controller.RightStick.Position / 1500;
+
+            if (Camera.ScreenPosition.Distance(camera) > 5)
+            {
+                Camera.ScreenPosition = camera;
+            }
+
+            //Orbwalker Position
+            var p = ObjectManager.Player.ServerPosition.To2D() + Controller.LeftStick.Position / 75;
             var pos = new Vector3(p.X, p.Y, ObjectManager.Player.Position.Z);
 
             PadPos = pos;
 
             if (ObjectManager.Player.Distance(pos) < 100)
             {
-                Console.WriteLine("No distance");
                 return;
             }
 
@@ -117,26 +116,55 @@ namespace ControlBuddy
                 return;
             }
 
-            if (Controller.DPad.IsAnyPressed() || Controller.IsABXYPressed()) // Change mode command
+            // Orbwalker
+            if (Controller.IsABXYPressed())
             {
-                if (Controller.DPad.Up || Controller.X)
+                if (Controller.X)
                 {
                     SetOrbwalkingMode(Orbwalker.ActiveModes.Combo);
                 }
-                else if (Controller.DPad.Left || Controller.A)
+                else if (Controller.A)
                 {
                     SetOrbwalkingMode(Orbwalker.ActiveModes.LaneClear);
                 }
-                else if (Controller.DPad.Right || Controller.Y)
+                else if (Controller.Y)
                 {
                     CurrentMode = Orbwalker.ActiveModes.Flee;
                     Player.IssueOrder(GameObjectOrder.MoveTo, PadPos);
                 }
-                else if (Controller.DPad.Down || Controller.B)
+                else if (Controller.B)
                 {
                     SetOrbwalkingMode(Orbwalker.ActiveModes.LastHit);
                 }
             }
+
+            // Items
+            if (Controller.DPad.IsAnyPressed())
+            {
+                if (Controller.DPad.Up)
+                {
+                    Player.Instance.Spellbook.CastSpell(SpellSlot.Recall, Player.Instance);
+                }
+
+                if (Controller.DPad.Right)
+                {
+                    var hp = Player.Instance.InventoryItems.FirstOrDefault(w => w.Id == ItemId.Health_Potion);
+                    if (hp != null)
+                    {
+                        hp.Cast(Player.Instance);
+                    }
+                    else
+                    {
+                        Chat.Print("No HP Pot available");
+                    }
+                }
+
+                if (Controller.DPad.Left)
+                {
+                    Player.Instance.Spellbook.CastSpell(SpellSlot.R, PadPos);
+                }
+            }
+
 
             var s1 = ObjectManager.Player.Spellbook.GetSpell(SpellSlot.Summoner1);
             var s2 = ObjectManager.Player.Spellbook.GetSpell(SpellSlot.Summoner2);
@@ -175,7 +203,7 @@ namespace ControlBuddy
                     break;
                 case "flash": //LOL
                     Controller.Update();
-                    var pos = ObjectManager.Player.ServerPosition.To2D() + Controller.LeftStick.Position/75;
+                    var pos = ObjectManager.Player.ServerPosition.To2D() + Controller.LeftStick.Position / 75;
                     pos.Extend(ObjectManager.Player.ServerPosition.To2D(), 550);
                     ObjectManager.Player.Spellbook.CastSpell(spell.Slot, pos.To3D());
                     break;
